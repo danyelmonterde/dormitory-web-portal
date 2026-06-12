@@ -96,7 +96,7 @@ def deployToEC2(serverIp, envPrefix) {
         // 3. Execute remote commands: Load image, fetch secrets, run container
         sh """
         ssh -o StrictHostKeyChecking=no ec2-user@${serverIp} '
-            # Create user-defined network if it doesn't exist
+            # Create user-defined network if it does not exist
             docker network create dorm-network || true
             
             # Start MySQL container if not already running on the network
