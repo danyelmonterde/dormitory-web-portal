@@ -41,6 +41,20 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(
+                    "/",
+                    "/index.html",
+                    "/login",
+                    "/admin-dashboard",
+                    "/dormer-dashboard",
+                    "/favicon.ico",
+                    "/*.js",
+                    "/*.css",
+                    "/assets/**",
+                    "/*.png",
+                    "/*.jpg",
+                    "/*.svg"
+                ).permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/api/auth/paymongo-webhook").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/dormer/**").hasRole("DORMER")
