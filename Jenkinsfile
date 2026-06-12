@@ -37,7 +37,12 @@ pipeline {
         }
 
         stage('Deploy to Develop') {
-            when { branch 'develop' }
+            when {
+                anyOf {
+                    branch 'develop'
+                    expression { env.GIT_BRANCH == 'origin/develop' || env.GIT_BRANCH == 'develop' || env.GIT_BRANCH == 'refs/heads/develop' }
+                }
+            }
             steps {
                 echo 'Deploying to Develop Environment (EC2: 8GB RAM)...'
                 script {
@@ -47,7 +52,12 @@ pipeline {
         }
 
         stage('Deploy to UAT') {
-            when { branch 'release' }
+            when {
+                anyOf {
+                    branch 'release'
+                    expression { env.GIT_BRANCH == 'origin/release' || env.GIT_BRANCH == 'release' || env.GIT_BRANCH == 'refs/heads/release' }
+                }
+            }
             steps {
                 echo 'Deploying to UAT Environment (EC2: 8GB RAM)...'
                 script {
@@ -57,7 +67,12 @@ pipeline {
         }
 
         stage('Deploy to Production') {
-            when { branch 'main' }
+            when {
+                anyOf {
+                    branch 'main'
+                    expression { env.GIT_BRANCH == 'origin/main' || env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'refs/heads/main' }
+                }
+            }
             steps {
                 echo 'Deploying to Production Environment (EC2: 8GB RAM)...'
                 script {
