@@ -96,6 +96,24 @@ def deployToEC2(serverIp, envPrefix) {
         // 3. Execute remote commands: Load image, fetch secrets, run container
         sh """
         ssh -o StrictHostKeyChecking=no ec2-user@${serverIp} '
+            # Create user-defined network if it doesn't exist
+            docker network create dorm-network || true
+            
+            # Start MySQL container if not already running on the network
+            if ! docker ps --filter "name=dorm-mysql" --format "{{.Names}}" | grep -q "^dorm-mysql$"; then
+                docker rm -f dorm-mysql || true
+                docker run -d --name dorm-mysql \\
+                    --network dorm-network \\
+                    -p 3306:3306 \\
+                    -e MYSQL_ROOT_PASSWORD=password \\
+                    -e MYSQL_DATABASE=dormitory_local \\
+                    --restart unless-stopped \\
+                    mysql:8.0
+                
+                # Give MySQL some time to initialize
+                sleep 15
+            fi
+            
             # Stop existing container
             docker stop ${APP_NAME}-${envPrefix} || true
             docker rm ${APP_NAME}-${envPrefix} || true
@@ -107,8 +125,12 @@ def deployToEC2(serverIp, envPrefix) {
             # Fetch secrets securely from AWS Secrets Manager using IAM role attached to EC2
             aws secretsmanager get-secret-value --secret-id ${envPrefix}-dorm-secrets --query SecretString --output text > .env.${envPrefix}
             
-            # Run new container
+            # Dynamically route DB connection to the dorm-mysql container instead of localhost
+            sed -i "s/localhost:3306/dorm-mysql:3306/g" .env.${envPrefix}
+            
+            # Run new container attached to the network
             docker run -d --name ${APP_NAME}-${envPrefix} \\
+                --network dorm-network \\
                 --env-file .env.${envPrefix} \\
                 -p 80:8080 \\
                 --restart unless-stopped \\
