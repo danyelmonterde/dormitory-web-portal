@@ -94,6 +94,7 @@ def deployToEC2(serverIp, envPrefix) {
         sh "scp -o StrictHostKeyChecking=no ${APP_NAME}-${envPrefix}.tar.bz2 ec2-user@${serverIp}:~/"
         
         // 3. Execute remote commands: Load image, fetch secrets, run container
+        def jqCmd = 'jq -r --arg sep "=" "to_entries[] | .key + \\$sep + .value"'
         sh """
         ssh -o StrictHostKeyChecking=no ec2-user@${serverIp} '
             # Create user-defined network if it does not exist
@@ -123,10 +124,10 @@ def deployToEC2(serverIp, envPrefix) {
             docker tag localhost/${APP_NAME}:${envPrefix} ${APP_NAME}:${envPrefix} || true
             
             # Fetch secrets securely from AWS Secrets Manager using IAM role attached to EC2
-            aws secretsmanager get-secret-value --secret-id ${envPrefix}-dorm-secrets --query SecretString --output text > .env.${envPrefix}
+            aws secretsmanager get-secret-value --secret-id ${envPrefix}-dorm-secrets --query SecretString --output text | ${jqCmd} > .env.${envPrefix}
             
-            # Dynamically route DB connection to the dorm-mysql container instead of localhost
-            sed -i "s/localhost:3306/dorm-mysql:3306/g" .env.${envPrefix}
+            # Dynamically route DB connection to the dorm-mysql container instead of localhost and append connection parameters
+            sed -i "s|localhost:3306/dormitory_local|dorm-mysql:3306/dormitory_local?createDatabaseIfNotExist=true\\&useSSL=false\\&allowPublicKeyRetrieval=true|g" .env.${envPrefix}
             
             # Run new container attached to the network
             docker run -d --name ${APP_NAME}-${envPrefix} \\
