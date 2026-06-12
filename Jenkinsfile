@@ -21,7 +21,7 @@ pipeline {
                     sh 'mvn clean test'
                 }
                 dir('frontend') {
-                    sh 'npm install'
+                    sh 'npm install --legacy-peer-deps'
                     sh 'ng test --watch=false --browsers=ChromeHeadless'
                 }
             }
