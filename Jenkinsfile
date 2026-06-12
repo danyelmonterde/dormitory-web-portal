@@ -30,7 +30,7 @@ pipeline {
         stage('Local Podman Integration Test') {
             steps {
                 echo 'Building and verifying container locally with Podman...'
-                sh 'podman build -t ${APP_NAME}:test-build .'
+                sh 'podman build --platform linux/amd64 -t ${APP_NAME}:test-build .'
                 // Run a quick verification command to ensure the container starts
                 sh 'podman run --rm ${APP_NAME}:test-build java -version'
             }
@@ -87,7 +87,7 @@ pipeline {
 def deployToEC2(serverIp, envPrefix) {
     sshagent([SSH_CRED]) {
         // 1. Build and export Podman image
-        sh "podman build -t ${APP_NAME}:${envPrefix} ."
+        sh "podman build --platform linux/amd64 -t ${APP_NAME}:${envPrefix} ."
         sh "podman save ${APP_NAME}:${envPrefix} | bzip2 > ${APP_NAME}-${envPrefix}.tar.bz2"
         
         // 2. Transfer image to EC2
