@@ -100,7 +100,7 @@ def deployToEC2(serverIp, envPrefix) {
             docker network create dorm-network || true
             
             # Start MySQL container if not already running on the network
-            if ! docker ps --filter "name=dorm-mysql" --format "{{.Names}}" | grep -q "^dorm-mysql$"; then
+            if ! docker ps --filter "name=dorm-mysql" --format "{{.Names}}" | grep -q "^dorm-mysql\$"; then
                 docker rm -f dorm-mysql || true
                 docker run -d --name dorm-mysql \\
                     --network dorm-network \\
