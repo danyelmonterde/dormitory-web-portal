@@ -1,0 +1,425 @@
+<div class="main-wrapper">
+  <app-navbar></app-navbar>
+
+  <div class="content-container animate-fade-in">
+    <div class="dashboard-layout">
+      <!-- Sidebar Tabs -->
+      <aside class="sidebar glass-panel">
+        <ul class="nav-tabs">
+          <li [class.active]="activeTab === 'room'" (click)="setTab('room')">
+            <span class="material-icons">meeting_room</span>
+            My Room
+          </li>
+          <li [class.active]="activeTab === 'bills'" (click)="setTab('bills')">
+            <span class="material-icons">receipt_long</span>
+            My Bills
+          </li>
+          <li [class.active]="activeTab === 'maintenance'" (click)="setTab('maintenance')">
+            <span class="material-icons">build_circle</span>
+            Maintenance & Incidents
+          </li>
+          <li [class.active]="activeTab === 'leaves'" (click)="setTab('leaves')">
+            <span class="material-icons">work_off</span>
+            My Leaves
+          </li>
+          <li [class.active]="activeTab === 'settings'" (click)="setTab('settings')">
+            <span class="material-icons">settings</span>
+            Settings
+          </li>
+        </ul>
+      </aside>
+
+      <!-- Main Dashboard Panel -->
+      <main class="main-panel glass-panel">
+        <!-- Tab 1: Room -->
+        <section *ngIf="activeTab === 'room'">
+          <div class="tab-header">
+            <h2 class="section-title">My Room Information</h2>
+            <p class="section-desc">Overview of your current room setup, co-tenants, and services.</p>
+          </div>
+
+          <div *ngIf="roomLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading room data...</p>
+          </div>
+
+          <div *ngIf="!roomLoading && roomData" class="grid-cols-2">
+            <!-- Room Specs -->
+            <div class="info-card">
+              <h3>Room Details</h3>
+              <div class="detail-row">
+                <span class="label">Room Number:</span>
+                <span class="valueHighlight">{{ roomData.roomNumber }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Capacity:</span>
+                <span class="value">{{ roomData.capacity }} Persons</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Monthly Base Rent:</span>
+                <span class="value">₱{{ roomData.monthlyRent | number:'1.2-2' }}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">WiFi Password:</span>
+                <span class="value highlight-wifi">
+                  <span class="material-icons">wifi</span>
+                  {{ roomData.wifiPassword || 'Not Provisioned' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Cleaning Request Booking -->
+            <div class="info-card cleaning-card">
+              <h3>Cleaning Services</h3>
+              <p class="card-desc">Need your room cleaned? Book an appointment. An admin-configured fee of ₱150.00 will be added to your next monthly bill.</p>
+              
+              <div class="alert-success" *ngIf="cleaningSuccessMsg">
+                <span class="material-icons">check_circle</span>
+                {{ cleaningSuccessMsg }}
+              </div>
+
+              <button class="glass-btn glass-btn-primary" (click)="bookCleaning()" [disabled]="bookingCleaning">
+                <span class="material-icons" *ngIf="!bookingCleaning">cleaning_services</span>
+                <span class="spinner" *ngIf="bookingCleaning"></span>
+                {{ bookingCleaning ? 'Booking...' : 'Book Room Cleaning (₱150)' }}
+              </button>
+            </div>
+
+            <!-- Co-tenants (Contact info masked) -->
+            <div class="info-card col-span-2">
+              <h3>Roommates & Co-tenants</h3>
+              <p class="card-desc">Contact information is masked for data privacy guidelines.</p>
+              
+              <div class="co-tenants-list" *ngIf="roomData.coTenants && roomData.coTenants.length > 0; else noRoommates">
+                <div class="co-tenant-item" *ngFor="let roommate of roomData.coTenants">
+                  <div class="tenant-avatar">
+                    <span class="material-icons">person</span>
+                  </div>
+                  <div class="tenant-info">
+                    <div class="tenant-name">{{ roommate.fullName }}</div>
+                    <div class="tenant-meta">
+                      <span>Email: {{ roommate.email }}</span>
+                      <span>Phone: {{ roommate.phoneNumber }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <ng-template #noRoommates>
+                <div class="no-data-alert">
+                  <span class="material-icons">info</span>
+                  You currently have no roommates in this room.
+                </div>
+              </ng-template>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 2: Bills -->
+        <section *ngIf="activeTab === 'bills'">
+          <div class="tab-header">
+            <h2 class="section-title">My Invoices & Utility Bills</h2>
+            <p class="section-desc">Verify your monthly rent, water, and electricity usage details.</p>
+          </div>
+
+          <div *ngIf="billsLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading invoices...</p>
+          </div>
+
+          <div *ngIf="!billsLoading && bills.length === 0" class="no-data-alert">
+            <span class="material-icons">receipt</span>
+            No bill invoices generated for your account.
+          </div>
+
+          <div *ngIf="!billsLoading && bills.length > 0" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Base Rent</th>
+                  <th>Electricity (₱12/kWh)</th>
+                  <th>Water (₱45/m³)</th>
+                  <th>Cleaning</th>
+                  <th>Total Due</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let bill of bills">
+                  <td>{{ bill.billingMonth }}</td>
+                  <td>₱{{ bill.baseRent | number:'1.2-2' }}</td>
+                  <td>
+                    ₱{{ bill.electricityTotal | number:'1.2-2' }}
+                    <span class="reading-meta">({{ bill.electricityPrev }} → {{ bill.electricityCurr }} kWh)</span>
+                  </td>
+                  <td>
+                    ₱{{ bill.waterTotal | number:'1.2-2' }}
+                    <span class="reading-meta">({{ bill.waterPrev }} → {{ bill.waterCurr }} m³)</span>
+                  </td>
+                  <td>₱{{ bill.cleaningFee | number:'1.2-2' }}</td>
+                  <td class="grand-total">₱{{ bill.grandTotal | number:'1.2-2' }}</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-paid]="bill.paid" [class.status-badge-unpaid]="!bill.paid">
+                      {{ bill.invoiceStatus }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="glass-btn glass-btn-primary pay-btn" *ngIf="!bill.paid" (click)="payBill(bill.id)" [disabled]="payingBillId === bill.id">
+                      <span class="material-icons" *ngIf="payingBillId !== bill.id">credit_card</span>
+                      <span class="spinner" *ngIf="payingBillId === bill.id"></span>
+                      {{ payingBillId === bill.id ? 'Processing...' : 'Pay via PayMongo' }}
+                    </button>
+                    <span class="paid-date" *ngIf="bill.paid">
+                      Ref: {{ bill.payMongoPaymentId }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 3: Maintenance & Incidents -->
+        <section *ngIf="activeTab === 'maintenance'">
+          <div class="tab-header">
+            <h2 class="section-title">Support Desk</h2>
+            <p class="section-desc">Report room maintenance requests or anonymously report misbehaving tenants.</p>
+          </div>
+
+          <div class="grid-cols-2">
+            <!-- Maintenance Report Form -->
+            <div class="info-card">
+              <h3>Report Broken Appliance/Furniture</h3>
+              <p class="card-desc">Request repairs for lightbulbs, plumbing, locks, or other appliances.</p>
+
+              <div class="alert-success" *ngIf="maintenanceSuccessMsg">
+                <span class="material-icons">check_circle</span>
+                {{ maintenanceSuccessMsg }}
+              </div>
+
+              <form [formGroup]="maintenanceForm" (ngSubmit)="onSubmitMaintenance()">
+                <div class="glass-input-group">
+                  <label for="remarks">Repair Details & Remarks</label>
+                  <textarea id="remarks" class="glass-input textarea" formControlName="remarks" placeholder="Describe the problem, e.g. Kitchen lightbulb flickering..."></textarea>
+                  <span class="error-msg" *ngIf="maintenanceForm.get('remarks')?.touched && maintenanceForm.get('remarks')?.invalid">Repair description is required.</span>
+                </div>
+
+                <div class="glass-input-group">
+                  <label for="photos">Attachment Photos (Simulated URLs)</label>
+                  <input id="photos" type="text" class="glass-input" formControlName="photoUrls" placeholder="Comma-separated image URLs (e.g. image1.jpg)">
+                </div>
+
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="maintenanceForm.invalid || submittingMaintenance">
+                  <span class="material-icons" *ngIf="!submittingMaintenance">send</span>
+                  <span class="spinner" *ngIf="submittingMaintenance"></span>
+                  {{ submittingMaintenance ? 'Submitting...' : 'Submit Maintenance Report' }}
+                </button>
+              </form>
+            </div>
+
+            <!-- Incident Report Form -->
+            <div class="info-card danger-bordered-card">
+              <h3>File Confidential Incident Report</h3>
+              <p class="card-desc">Confidential reporting of tenant rule violations or misbehavior. Alerts system administrators only.</p>
+
+              <div class="alert-success" *ngIf="incidentSuccessMsg">
+                <span class="material-icons">check_circle</span>
+                {{ incidentSuccessMsg }}
+              </div>
+
+              <form [formGroup]="incidentForm" (ngSubmit)="onSubmitIncident()">
+                <div class="glass-input-group">
+                  <label for="incidentRemarks">Incident details</label>
+                  <textarea id="incidentRemarks" class="glass-input textarea" formControlName="remarks" placeholder="Describe what happened in detail..."></textarea>
+                  <span class="error-msg" *ngIf="incidentForm.get('remarks')?.touched && incidentForm.get('remarks')?.invalid">Incident details are required.</span>
+                </div>
+
+                <div class="glass-input-group">
+                  <label for="incidentPhotos">Incident Proof / Photo (Optional URL)</label>
+                  <input id="incidentPhotos" type="text" class="glass-input" formControlName="photoUrls" placeholder="Image URL for proof">
+                </div>
+
+                <button type="submit" class="glass-btn glass-btn-danger" [disabled]="incidentForm.invalid || submittingIncident">
+                  <span class="material-icons" *ngIf="!submittingIncident">gavel</span>
+                  <span class="spinner" *ngIf="submittingIncident"></span>
+                  {{ submittingIncident ? 'Submitting...' : 'Submit Incident Report' }}
+                </button>
+              </form>
+            </div>
+
+            <!-- History of maintenance requests -->
+            <div class="info-card col-span-2">
+              <h3>Maintenance History</h3>
+              <div *ngIf="maintenanceLoading" class="loader-container">
+                <span class="spinner"></span>
+                <p>Loading history...</p>
+              </div>
+
+              <div *ngIf="!maintenanceLoading && maintenanceReports.length === 0" class="no-data-alert">
+                No past maintenance requests.
+              </div>
+
+              <div *ngIf="!maintenanceLoading && maintenanceReports.length > 0" class="custom-table-container">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Report ID</th>
+                      <th>Room</th>
+                      <th>Description</th>
+                      <th>Status</th>
+                      <th>Scheduled Date</th>
+                      <th>Admin Feedback</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let report of maintenanceReports">
+                      <td>#{{ report.id }}</td>
+                      <td>{{ report.roomNumber }}</td>
+                      <td>{{ report.remarks }}</td>
+                      <td>
+                        <span class="status-badge" [class.status-badge-pending]="report.status === 'PENDING'" [class.status-badge-scheduled]="report.status === 'SCHEDULED'" [class.status-badge-resolved]="report.status === 'RESOLVED'">
+                          {{ report.status }}
+                        </span>
+                      </td>
+                      <td>{{ report.scheduledDate ? (report.scheduledDate | date:'mediumDate') : 'Unscheduled' }}</td>
+                      <td>{{ report.resolverRemarks || 'No admin notes yet' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 4: Leaves -->
+        <section *ngIf="activeTab === 'leaves'">
+          <div class="tab-header">
+            <h2 class="section-title">My Leaves & Move-Outs</h2>
+            <p class="section-desc">Notify the administration of temporary leaves or schedule a permanent move-out date.</p>
+          </div>
+
+          <div class="grid-cols-2">
+            <!-- Submit Leave Form -->
+            <div class="info-card">
+              <h3>Submit Notification Form</h3>
+
+              <div class="alert-success" *ngIf="leaveSuccessMsg">
+                <span class="material-icons">check_circle</span>
+                {{ leaveSuccessMsg }}
+              </div>
+
+              <form [formGroup]="leaveForm" (ngSubmit)="onSubmitLeave()">
+                <div class="glass-input-group">
+                  <label for="startDate">Start Date</label>
+                  <input id="startDate" type="date" class="glass-input" formControlName="startDate">
+                </div>
+
+                <div class="glass-input-group" *ngIf="!leaveForm.get('permanentMoveOut')?.value">
+                  <label for="endDate">End Date</label>
+                  <input id="endDate" type="date" class="glass-input" formControlName="endDate">
+                </div>
+
+                <div class="checkbox-group">
+                  <input id="permanentMoveOut" type="checkbox" formControlName="permanentMoveOut">
+                  <label for="permanentMoveOut">Permanent Move-Out</label>
+                </div>
+
+                <div class="glass-input-group">
+                  <label for="leaveRemarks">Special remarks or forwarding details</label>
+                  <textarea id="leaveRemarks" class="glass-input textarea" formControlName="remarks" placeholder="Forwarding address, vacation notes, details..."></textarea>
+                </div>
+
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="leaveForm.invalid || submittingLeave">
+                  <span class="material-icons" *ngIf="!submittingLeave">calendar_today</span>
+                  <span class="spinner" *ngIf="submittingLeave"></span>
+                  {{ submittingLeave ? 'Submitting...' : 'Register Leave Notification' }}
+                </button>
+              </form>
+            </div>
+
+            <!-- Leaves request list -->
+            <div class="info-card">
+              <h3>Leave Notification Logs</h3>
+              <div *ngIf="leavesLoading" class="loader-container">
+                <span class="spinner"></span>
+                <p>Loading leaves...</p>
+              </div>
+
+              <div *ngIf="!leavesLoading && leaves.length === 0" class="no-data-alert">
+                No leave request logs found.
+              </div>
+
+              <div *ngIf="!leavesLoading && leaves.length > 0" class="co-tenants-list">
+                <div class="co-tenant-item" *ngFor="let leave of leaves">
+                  <div class="tenant-avatar">
+                    <span class="material-icons">event</span>
+                  </div>
+                  <div class="tenant-info">
+                    <div class="tenant-name">
+                      {{ leave.permanentMoveOut ? 'Permanent Move-Out' : 'Temporary Vacation' }}
+                    </div>
+                    <div class="tenant-meta">
+                      <span>Start: {{ leave.startDate | date:'mediumDate' }}</span>
+                      <span *ngIf="!leave.permanentMoveOut">End: {{ leave.endDate | date:'mediumDate' }}</span>
+                      <span>Status: <strong>{{ leave.status }}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 5: Settings -->
+        <section *ngIf="activeTab === 'settings'">
+          <div class="tab-header">
+            <h2 class="section-title">My Profile & Security Settings</h2>
+            <p class="section-desc">Update your display information and change your password.</p>
+          </div>
+
+          <div *ngIf="profileLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading profile...</p>
+          </div>
+
+          <div *ngIf="!profileLoading" class="info-card max-width-600">
+            <h3>Update Profile Information</h3>
+
+            <div class="alert-success" *ngIf="profileSuccessMsg">
+              <span class="material-icons">check_circle</span>
+              {{ profileSuccessMsg }}
+            </div>
+            <div class="alert-danger" *ngIf="profileErrorMsg">
+              <span class="material-icons">error</span>
+              {{ profileErrorMsg }}
+            </div>
+
+            <form [formGroup]="profileForm" (ngSubmit)="onSubmitProfile()">
+              <div class="glass-input-group">
+                <label for="fullName">Full Name</label>
+                <input id="fullName" type="text" class="glass-input" formControlName="fullName">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="phoneNumber">Phone Number</label>
+                <input id="phoneNumber" type="text" class="glass-input" formControlName="phoneNumber">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="password">New Password (leave blank to keep current)</label>
+                <input id="password" type="password" class="glass-input" formControlName="password" placeholder="••••••••">
+              </div>
+
+              <button type="submit" class="glass-btn glass-btn-primary" [disabled]="profileForm.invalid || submittingProfile">
+                <span class="material-icons" *ngIf="!submittingProfile">save</span>
+                <span class="spinner" *ngIf="submittingProfile"></span>
+                {{ submittingProfile ? 'Saving...' : 'Update Credentials' }}
+              </button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>

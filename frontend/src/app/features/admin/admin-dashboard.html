@@ -1,0 +1,695 @@
+<div class="main-wrapper">
+  <app-navbar></app-navbar>
+
+  <div class="content-container animate-fade-in">
+    <div class="dashboard-layout">
+      <!-- Sidebar Tabs -->
+      <aside class="sidebar glass-panel">
+        <ul class="nav-tabs">
+          <li [class.active]="activeTab === 'users'" (click)="setTab('users')">
+            <span class="material-icons">people</span>
+            Manage Tenants
+          </li>
+          <li [class.active]="activeTab === 'rooms'" (click)="setTab('rooms')">
+            <span class="material-icons">meeting_room</span>
+            Manage Rooms
+          </li>
+          <li [class.active]="activeTab === 'facilities'" (click)="setTab('facilities')">
+            <span class="material-icons">room_service</span>
+            Facilities & Appliances
+          </li>
+          <li [class.active]="activeTab === 'bills'" (click)="setTab('bills')">
+            <span class="material-icons">receipt_long</span>
+            Invoices & Utilities
+          </li>
+          <li [class.active]="activeTab === 'reports'" (click)="setTab('reports')">
+            <span class="material-icons">assignment_late</span>
+            Support Desk
+          </li>
+          <li [class.active]="activeTab === 'leaves'" (click)="setTab('leaves')">
+            <span class="material-icons">work_off</span>
+            Leaves & Move-Outs
+          </li>
+          <li [class.active]="activeTab === 'webhook'" (click)="setTab('webhook')">
+            <span class="material-icons">settings_ethernet</span>
+            Webhook Simulator
+          </li>
+        </ul>
+      </aside>
+
+      <!-- Main Dashboard Panel -->
+      <main class="main-panel glass-panel">
+        <!-- Tab 1: Manage Tenants -->
+        <section *ngIf="activeTab === 'users'">
+          <div class="tab-header flex-header">
+            <div>
+              <h2 class="section-title">Tenant User Administration</h2>
+              <p class="section-desc">Add, edit, or disable user profiles and assign them to specific rooms.</p>
+            </div>
+            <button class="glass-btn glass-btn-primary" (click)="openNewUser()" *ngIf="!showUserForm">
+              <span class="material-icons">person_add</span>
+              Add New User
+            </button>
+          </div>
+
+          <div class="alert-success" *ngIf="userSuccessMsg">
+            <span class="material-icons">check_circle</span>
+            {{ userSuccessMsg }}
+          </div>
+
+          <!-- User Form -->
+          <div class="info-card max-width-600" *ngIf="showUserForm">
+            <h3>{{ editingUserId ? 'Edit Tenant Profile' : 'Register New Tenant' }}</h3>
+            <form [formGroup]="userForm" (ngSubmit)="onSubmitUser()">
+              <div class="glass-input-group">
+                <label for="username">Username</label>
+                <input id="username" type="text" class="glass-input" formControlName="username" placeholder="e.g. jdoe">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="email">Email Address</label>
+                <input id="email" type="email" class="glass-input" formControlName="email" placeholder="e.g. john@email.com">
+              </div>
+
+              <div class="glass-input-group" *ngIf="!editingUserId">
+                <label for="password">Password</label>
+                <input id="password" type="password" class="glass-input" formControlName="password" placeholder="••••••••">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="fullName">Full Name</label>
+                <input id="fullName" type="text" class="glass-input" formControlName="fullName" placeholder="e.g. John Doe">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="phoneNumber">Phone Number</label>
+                <input id="phoneNumber" type="text" class="glass-input" formControlName="phoneNumber" placeholder="e.g. +639123456789">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="role">User Role</label>
+                <select id="role" class="glass-select" formControlName="role">
+                  <option value="ROLE_DORMER">DORMER (Tenant)</option>
+                  <option value="ROLE_ADMIN">ADMIN (Manager)</option>
+                </select>
+              </div>
+
+              <div class="glass-input-group">
+                <label for="roomId">Assign Room</label>
+                <select id="roomId" class="glass-select" formControlName="roomId">
+                  <option value="">No Room Assigned</option>
+                  <option *ngFor="let room of rooms" [value]="room.id">{{ room.roomNumber }} (Rent: ₱{{ room.monthlyRent }})</option>
+                </select>
+              </div>
+
+              <div class="checkbox-group">
+                <input id="enabled" type="checkbox" formControlName="enabled">
+                <label for="enabled">Account Enabled / Active</label>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="userForm.invalid">Save Profile</button>
+                <button type="button" class="glass-btn glass-btn-secondary" (click)="showUserForm = false">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div *ngIf="usersLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading tenant directories...</p>
+          </div>
+
+          <!-- Users Table -->
+          <div *ngIf="!usersLoading && !showUserForm" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Full Name</th>
+                  <th>Role</th>
+                  <th>Room</th>
+                  <th>Contact Info</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let u of users">
+                  <td>{{ u.username }}</td>
+                  <td>{{ u.fullName }}</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-scheduled]="u.role === 'ROLE_ADMIN'" [class.status-badge-pending]="u.role === 'ROLE_DORMER'">
+                      {{ u.role === 'ROLE_ADMIN' ? 'Admin' : 'Dormer' }}
+                    </span>
+                  </td>
+                  <td>{{ u.roomNumber || 'None' }}</td>
+                  <td>
+                    <span class="contact-meta">Email: {{ u.email }}</span>
+                    <span class="contact-meta">Phone: {{ u.phoneNumber }}</span>
+                  </td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-paid]="u.enabled" [class.status-badge-unpaid]="!u.enabled">
+                      {{ u.enabled ? 'Enabled' : 'Disabled' }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="glass-btn glass-btn-secondary action-btn" (click)="openEditUser(u)">
+                      <span class="material-icons icon-btn-only">edit</span>
+                    </button>
+                    <button class="glass-btn glass-btn-danger action-btn" (click)="deleteUser(u.id)">
+                      <span class="material-icons icon-btn-only">delete</span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 2: Manage Rooms -->
+        <section *ngIf="activeTab === 'rooms'">
+          <div class="tab-header flex-header">
+            <div>
+              <h2 class="section-title">Room Administration</h2>
+              <p class="section-desc">Manage room configurations, capacities, base pricing, and WiFi credentials.</p>
+            </div>
+            <button class="glass-btn glass-btn-primary" (click)="openNewRoom()" *ngIf="!showRoomForm">
+              <span class="material-icons">add_box</span>
+              Add Room
+            </button>
+          </div>
+
+          <div class="alert-success" *ngIf="roomSuccessMsg">
+            <span class="material-icons">check_circle</span>
+            {{ roomSuccessMsg }}
+          </div>
+
+          <!-- Room Form -->
+          <div class="info-card max-width-600" *ngIf="showRoomForm">
+            <h3>{{ editingRoomId ? 'Edit Room Properties' : 'Configure New Room' }}</h3>
+            <form [formGroup]="roomForm" (ngSubmit)="onSubmitRoom()">
+              <div class="glass-input-group">
+                <label for="roomNumber">Room Number/Name</label>
+                <input id="roomNumber" type="text" class="glass-input" formControlName="roomNumber" placeholder="e.g. Room 101">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="capacity">Room Max Capacity</label>
+                <input id="capacity" type="number" class="glass-input" formControlName="capacity" placeholder="e.g. 4">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="monthlyRent">Monthly Base Rent (₱)</label>
+                <input id="monthlyRent" type="number" class="glass-input" formControlName="monthlyRent" placeholder="e.g. 5000">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="wifiPassword">Room WiFi Password</label>
+                <input id="wifiPassword" type="text" class="glass-input" formControlName="wifiPassword" placeholder="WiFi secret password">
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="roomForm.invalid">Save Room</button>
+                <button type="button" class="glass-btn glass-btn-secondary" (click)="showRoomForm = false">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div *ngIf="roomsLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading rooms...</p>
+          </div>
+
+          <!-- Rooms Table -->
+          <div *ngIf="!roomsLoading && !showRoomForm" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Room Name</th>
+                  <th>Rent Fee</th>
+                  <th>Capacity</th>
+                  <th>WiFi Password</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let r of rooms">
+                  <td class="valueHighlight">{{ r.roomNumber }}</td>
+                  <td>₱{{ r.monthlyRent | number:'1.2-2' }}</td>
+                  <td>{{ r.capacity }} Persons</td>
+                  <td>
+                    <span class="highlight-wifi">
+                      <span class="material-icons">wifi</span>
+                      {{ r.wifiPassword || 'None' }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="glass-btn glass-btn-secondary action-btn" (click)="openEditRoom(r)">
+                      <span class="material-icons icon-btn-only">edit</span>
+                    </button>
+                    <button class="glass-btn glass-btn-danger action-btn" (click)="deleteRoom(r.id)">
+                      <span class="material-icons icon-btn-only">delete</span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 3: Facilities -->
+        <section *ngIf="activeTab === 'facilities'">
+          <div class="tab-header flex-header">
+            <div>
+              <h2 class="section-title">Shared Facilities & Appliance CRUD</h2>
+              <p class="section-desc">Create and monitor statuses of shared common areas, washers, microwaves, and gym equipment.</p>
+            </div>
+            <button class="glass-btn glass-btn-primary" (click)="openNewFacility()" *ngIf="!showFacilityForm">
+              <span class="material-icons">add_circle</span>
+              Add Facility
+            </button>
+          </div>
+
+          <div class="alert-success" *ngIf="facilitySuccessMsg">
+            <span class="material-icons">check_circle</span>
+            {{ facilitySuccessMsg }}
+          </div>
+
+          <!-- Facility Form -->
+          <div class="info-card max-width-600" *ngIf="showFacilityForm">
+            <h3>{{ editingFacilityId ? 'Edit Shared Facility Details' : 'Configure New Common Asset' }}</h3>
+            <form [formGroup]="facilityForm" (ngSubmit)="onSubmitFacility()">
+              <div class="glass-input-group">
+                <label for="facilityName">Asset/Facility Name</label>
+                <input id="facilityName" type="text" class="glass-input" formControlName="name" placeholder="e.g. Microwave 1">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="facilityStatus">Operational Status</label>
+                <select id="facilityStatus" class="glass-select" formControlName="status">
+                  <option value="OPERATIONAL">OPERATIONAL</option>
+                  <option value="UNDER_REPAIR">UNDER REPAIR</option>
+                  <option value="OUT_OF_ORDER">OUT OF ORDER</option>
+                </select>
+              </div>
+
+              <div class="glass-input-group">
+                <label for="facilityRemarks">Remarks/Location</label>
+                <input id="facilityRemarks" type="text" class="glass-input" formControlName="remarks" placeholder="e.g. Ground floor pantry">
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="facilityForm.invalid">Save Asset</button>
+                <button type="button" class="glass-btn glass-btn-secondary" (click)="showFacilityForm = false">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div *ngIf="facilitiesLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading assets...</p>
+          </div>
+
+          <!-- Facilities Table -->
+          <div *ngIf="!facilitiesLoading && !showFacilityForm" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Asset Name</th>
+                  <th>Status</th>
+                  <th>Remarks / Description</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let f of facilities">
+                  <td class="valueHighlight">{{ f.name }}</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-resolved]="f.status === 'OPERATIONAL'" [class.status-badge-pending]="f.status === 'UNDER_REPAIR'" [class.status-badge-unpaid]="f.status === 'OUT_OF_ORDER'">
+                      {{ f.status }}
+                    </span>
+                  </td>
+                  <td>{{ f.remarks }}</td>
+                  <td>
+                    <button class="glass-btn glass-btn-secondary action-btn" (click)="openEditFacility(f)">
+                      <span class="material-icons icon-btn-only">edit</span>
+                    </button>
+                    <button class="glass-btn glass-btn-danger action-btn" (click)="deleteFacility(f.id)">
+                      <span class="material-icons icon-btn-only">delete</span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 4: Invoices -->
+        <section *ngIf="activeTab === 'bills'">
+          <div class="tab-header flex-header">
+            <div>
+              <h2 class="section-title">Invoice & Utility Generation</h2>
+              <p class="section-desc">Create billing transactions. Monthly rent and pending cleaning booking fees are added automatically.</p>
+            </div>
+            <button class="glass-btn glass-btn-primary" (click)="openNewBill()" *ngIf="!showBillForm">
+              <span class="material-icons">receipt</span>
+              New Invoice Entry
+            </button>
+          </div>
+
+          <div class="alert-success" *ngIf="billSuccessMsg">
+            <span class="material-icons">check_circle</span>
+            {{ billSuccessMsg }}
+          </div>
+
+          <!-- Bill Form -->
+          <div class="info-card max-width-600" *ngIf="showBillForm">
+            <h3>Generate Invoice Entry</h3>
+            <form [formGroup]="billForm" (ngSubmit)="onSubmitBill()">
+              <div class="glass-input-group">
+                <label for="tenantUsername">Select Tenant</label>
+                <select id="tenantUsername" class="glass-select" formControlName="tenantUsername">
+                  <option value="">Choose tenant...</option>
+                  <option *ngFor="let u of users" [value]="u.username" [hidden]="u.role === 'ROLE_ADMIN'">{{ u.fullName }} ({{ u.username }})</option>
+                </select>
+              </div>
+
+              <div class="glass-input-group">
+                <label for="billingMonth">Billing Period/Month</label>
+                <input id="billingMonth" type="text" class="glass-input" formControlName="billingMonth" placeholder="e.g. June 2026">
+              </div>
+
+              <div class="grid-cols-2">
+                <div class="glass-input-group">
+                  <label for="electricityPrev">Prev Electricity Reading (kWh)</label>
+                  <input id="electricityPrev" type="number" class="glass-input" formControlName="electricityPrev">
+                </div>
+                <div class="glass-input-group">
+                  <label for="electricityCurr">Current Electricity Reading (kWh)</label>
+                  <input id="electricityCurr" type="number" class="glass-input" formControlName="electricityCurr">
+                </div>
+              </div>
+
+              <div class="grid-cols-2">
+                <div class="glass-input-group">
+                  <label for="waterPrev">Prev Water Reading (m³)</label>
+                  <input id="waterPrev" type="number" class="glass-input" formControlName="waterPrev">
+                </div>
+                <div class="glass-input-group">
+                  <label for="waterCurr">Current Water Reading (m³)</label>
+                  <input id="waterCurr" type="number" class="glass-input" formControlName="waterCurr">
+                </div>
+              </div>
+
+              <div class="glass-input-group">
+                <label for="meterEvidenceUrl">Meter Attachment Evidence (Simulated URL)</label>
+                <input id="meterEvidenceUrl" type="text" class="glass-input" formControlName="meterEvidenceUrl" placeholder="Meter image/PDF URL">
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="glass-btn glass-btn-primary" [disabled]="billForm.invalid">Generate Bill</button>
+                <button type="button" class="glass-btn glass-btn-secondary" (click)="showBillForm = false">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div *ngIf="billsLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading invoices...</p>
+          </div>
+
+          <!-- Bills Table -->
+          <div *ngIf="!billsLoading && !showBillForm" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Tenant</th>
+                  <th>Room</th>
+                  <th>Month</th>
+                  <th>Base Rent</th>
+                  <th>Elec Cost</th>
+                  <th>Water Cost</th>
+                  <th>Cleaning Fee</th>
+                  <th>Grand Total</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let b of bills">
+                  <td>{{ b.tenantFullName }}</td>
+                  <td>{{ b.roomNumber }}</td>
+                  <td>{{ b.billingMonth }}</td>
+                  <td>₱{{ b.baseRent }}</td>
+                  <td>₱{{ b.electricityTotal }}</td>
+                  <td>₱{{ b.waterTotal }}</td>
+                  <td>₱{{ b.cleaningFee }}</td>
+                  <td class="grand-total">₱{{ b.grandTotal }}</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-paid]="b.paid" [class.status-badge-unpaid]="!b.paid">
+                      {{ b.invoiceStatus }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="glass-btn glass-btn-danger action-btn" (click)="deleteBill(b.id)">
+                      <span class="material-icons icon-btn-only">delete</span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 5: Support Desk -->
+        <section *ngIf="activeTab === 'reports'">
+          <div class="tab-header">
+            <h2 class="section-title">Support Desk & Reports</h2>
+            <p class="section-desc">Resolve maintenance requests and monitor confidential incident logs.</p>
+          </div>
+
+          <div *ngIf="reportsLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading reports data...</p>
+          </div>
+
+          <div *ngIf="!reportsLoading" class="grid-cols-2">
+            <!-- Maintenance resolving section -->
+            <div class="info-card col-span-2">
+              <h3>Maintenance Requests</h3>
+              <p class="card-desc">Admins view unmasked user contact details to schedule visits.</p>
+
+              <!-- Resolving Action Panel -->
+              <div class="resolution-panel" *ngIf="resolvingReportId">
+                <h4>Update Maintenance Request #{{ resolvingReportId }}</h4>
+                <form [formGroup]="resolutionForm" (ngSubmit)="onSubmitResolution()">
+                  <div class="glass-input-group">
+                    <label for="resStatus">Update Status</label>
+                    <select id="resStatus" class="glass-select" formControlName="status">
+                      <option value="PENDING">PENDING</option>
+                      <option value="SCHEDULED">SCHEDULED</option>
+                      <option value="RESOLVED">RESOLVED</option>
+                    </select>
+                  </div>
+                  <div class="glass-input-group">
+                    <label for="resScheduledDate">Scheduled Work Date</label>
+                    <input id="resScheduledDate" type="datetime-local" class="glass-input" formControlName="scheduledDate">
+                  </div>
+                  <div class="glass-input-group">
+                    <label for="resRemarks">Resolver Comments / Feedback for Tenant</label>
+                    <input id="resRemarks" type="text" class="glass-input" formControlName="resolverRemarks" placeholder="e.g. Scheduled plumber on Sat morning...">
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="glass-btn glass-btn-primary" [disabled]="resolutionForm.invalid">Update Status</button>
+                    <button type="button" class="glass-btn glass-btn-secondary" (click)="resolvingReportId = null">Cancel</button>
+                  </div>
+                </form>
+              </div>
+
+              <div *ngIf="maintenanceReports.length === 0" class="no-data-alert">
+                No maintenance reports filed.
+              </div>
+
+              <div *ngIf="maintenanceReports.length > 0" class="custom-table-container">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Tenant Details</th>
+                      <th>Room</th>
+                      <th>Problem Remarks</th>
+                      <th>Status</th>
+                      <th>Scheduled Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let mr of maintenanceReports">
+                      <td>
+                        <strong>{{ mr.reporterFullName }}</strong>
+                        <span class="reading-meta">{{ mr.reporterContactInfo }}</span>
+                      </td>
+                      <td>{{ mr.roomNumber }}</td>
+                      <td>{{ mr.remarks }}</td>
+                      <td>
+                        <span class="status-badge" [class.status-badge-pending]="mr.status === 'PENDING'" [class.status-badge-scheduled]="mr.status === 'SCHEDULED'" [class.status-badge-resolved]="mr.status === 'RESOLVED'">
+                          {{ mr.status }}
+                        </span>
+                      </td>
+                      <td>{{ mr.scheduledDate ? (mr.scheduledDate | date:'medium') : 'Unscheduled' }}</td>
+                      <td>
+                        <button class="glass-btn glass-btn-secondary" (click)="openResolveReport(mr)">
+                          Update Status
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Incident Reports (Secret Logs) -->
+            <div class="info-card col-span-2 danger-bordered-card">
+              <h3>Confidential Incident Reports</h3>
+              <p class="card-desc">Filed confidentially by dormers regarding roommates or rules violation. For admin eyes only.</p>
+
+              <div *ngIf="incidentReports.length === 0" class="no-data-alert">
+                No incident reports filed.
+              </div>
+
+              <div *ngIf="incidentReports.length > 0" class="custom-table-container">
+                <table class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Reporter</th>
+                      <th>Room</th>
+                      <th>Incident Narrative</th>
+                      <th>Reported At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let ir of incidentReports">
+                      <td>{{ ir.reporterUsername }}</td>
+                      <td>{{ ir.roomNumber }}</td>
+                      <td>{{ ir.remarks }}</td>
+                      <td>{{ ir.createdAt | date:'medium' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 6: Leaves Management -->
+        <section *ngIf="activeTab === 'leaves'">
+          <div class="tab-header">
+            <h2 class="section-title">Leaves & Move-Out Administration</h2>
+            <p class="section-desc">Manage dormer leave requests and approve move-out timelines for security clearance.</p>
+          </div>
+
+          <div *ngIf="leavesLoading" class="loader-container">
+            <span class="spinner"></span>
+            <p>Loading leave logs...</p>
+          </div>
+
+          <div *ngIf="!leavesLoading && leaves.length === 0" class="no-data-alert">
+            No registered leave notifications found.
+          </div>
+
+          <div *ngIf="!leavesLoading && leaves.length > 0" class="custom-table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Tenant Name</th>
+                  <th>Leave Type</th>
+                  <th>Start Date</th>
+                  <th>End Date</th>
+                  <th>Remarks</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let l of leaves">
+                  <td>{{ l.tenantFullName }} ({{ l.tenantUsername }})</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-unpaid]="l.permanentMoveOut" [class.status-badge-scheduled]="!l.permanentMoveOut">
+                      {{ l.permanentMoveOut ? 'Move-Out' : 'Vacation' }}
+                    </span>
+                  </td>
+                  <td>{{ l.startDate | date:'mediumDate' }}</td>
+                  <td>{{ l.permanentMoveOut ? 'N/A' : (l.endDate | date:'mediumDate') }}</td>
+                  <td>{{ l.remarks }}</td>
+                  <td>
+                    <span class="status-badge" [class.status-badge-pending]="l.status === 'PENDING'" [class.status-badge-resolved]="l.status === 'APPROVED'" [class.status-badge-unpaid]="l.status === 'REJECTED'">
+                      {{ l.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="flex-actions" *ngIf="l.status === 'PENDING'">
+                      <button class="glass-btn glass-btn-primary action-btn" (click)="updateLeave(l.id, 'APPROVED')">
+                        <span class="material-icons icon-btn-only">check</span>
+                      </button>
+                      <button class="glass-btn glass-btn-danger action-btn" (click)="updateLeave(l.id, 'REJECTED')">
+                        <span class="material-icons icon-btn-only">close</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Tab 7: Webhook Simulator -->
+        <section *ngIf="activeTab === 'webhook'">
+          <div class="tab-header">
+            <h2 class="section-title">PayMongo Webhook Integration Simulator</h2>
+            <p class="section-desc">Simulate third-party payment callback callbacks locally to verify transaction status updates.</p>
+          </div>
+
+          <div class="info-card max-width-600">
+            <h3>Trigger Payment Webhook Callback</h3>
+            <p class="card-desc">Provide payment information to call the webhook entrypoint. Updates target invoice to "PAID" status immediately.</p>
+
+            <div class="alert-success" *ngIf="webhookSuccessMsg">
+              <span class="material-icons">check_circle</span>
+              {{ webhookSuccessMsg }}
+            </div>
+
+            <form [formGroup]="webhookForm" (ngSubmit)="onSubmitWebhook()">
+              <div class="glass-input-group">
+                <label for="webBillId">Target Invoice Bill</label>
+                <select id="webBillId" class="glass-select" formControlName="billId">
+                  <option value="">Choose unpaid invoice...</option>
+                  <option *ngFor="let b of bills" [value]="b.id" [hidden]="b.paid">
+                    ID: #{{ b.id }} - Tenant: {{ b.tenantUsername }} (Month: {{ b.billingMonth }} - Amount: ₱{{ b.grandTotal }})
+                  </option>
+                </select>
+              </div>
+
+              <div class="glass-input-group">
+                <label for="webPaymentId">PayMongo Transaction Reference</label>
+                <input id="webPaymentId" type="text" class="glass-input" formControlName="paymentId">
+              </div>
+
+              <div class="glass-input-group">
+                <label for="webStatus">Simulated Gateway Status</label>
+                <select id="webStatus" class="glass-select" formControlName="status">
+                  <option value="SUCCESS">SUCCESS (Complete Payment)</option>
+                  <option value="FAILED">FAILED (Transaction Aborted)</option>
+                </select>
+              </div>
+
+              <button type="submit" class="glass-btn glass-btn-primary" [disabled]="webhookForm.invalid || submittingWebhook">
+                <span class="material-icons" *ngIf="!submittingWebhook">settings_ethernet</span>
+                <span class="spinner" *ngIf="submittingWebhook"></span>
+                {{ submittingWebhook ? 'Sending webhook payload...' : 'Simulate Callback' }}
+              </button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
