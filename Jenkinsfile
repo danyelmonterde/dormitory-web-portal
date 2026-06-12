@@ -102,6 +102,7 @@ def deployToEC2(serverIp, envPrefix) {
             
             # Load new image
             bunzip2 -c ${APP_NAME}-${envPrefix}.tar.bz2 | docker load
+            docker tag localhost/${APP_NAME}:${envPrefix} ${APP_NAME}:${envPrefix} || true
             
             # Fetch secrets securely from AWS Secrets Manager using IAM role attached to EC2
             aws secretsmanager get-secret-value --secret-id ${envPrefix}-dorm-secrets --query SecretString --output text > .env.${envPrefix}
