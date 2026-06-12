@@ -9,6 +9,8 @@ pipeline {
         UAT_IP = credentials('ec2-uat-ip')
         PROD_IP = credentials('ec2-prod-ip')
         SSH_CRED = 'ec2-ssh-key' 
+        // Add homebrew and podman paths to PATH for the local Jenkins agent
+        PATH = "/opt/homebrew/bin:/opt/podman/bin:${env.PATH}"
     }
 
     stages {
@@ -69,9 +71,9 @@ pipeline {
 // Reusable deployment function
 def deployToEC2(serverIp, envPrefix) {
     sshagent([SSH_CRED]) {
-        // 1. Build and export Docker image
-        sh "docker build -t ${APP_NAME}:${envPrefix} ."
-        sh "docker save ${APP_NAME}:${envPrefix} | bzip2 > ${APP_NAME}-${envPrefix}.tar.bz2"
+        // 1. Build and export Podman image
+        sh "podman build -t ${APP_NAME}:${envPrefix} ."
+        sh "podman save ${APP_NAME}:${envPrefix} | bzip2 > ${APP_NAME}-${envPrefix}.tar.bz2"
         
         // 2. Transfer image to EC2
         sh "scp -o StrictHostKeyChecking=no ${APP_NAME}-${envPrefix}.tar.bz2 ec2-user@${serverIp}:~/"
