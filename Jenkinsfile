@@ -22,7 +22,10 @@ pipeline {
 
         stage('Push to Nexus Registry') {
             steps {
-                sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                withCredentials([usernamePassword(credentialsId: 'nexus-credentials', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                    sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${REGISTRY}"
+                    sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                }
             }
         }
 
