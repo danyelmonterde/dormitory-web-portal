@@ -2,144 +2,45 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'ap-southeast-1'
-        APP_NAME = 'dorm-portal'
-        // EC2 IPs configured in Jenkins Credentials/Environment
-        DEV_IP = credentials('ec2-dev-ip')
-        UAT_IP = credentials('ec2-uat-ip')
-        PROD_IP = credentials('ec2-prod-ip')
-        SSH_CRED = 'ec2-ssh-key' 
-        // Add homebrew and podman paths to PATH for the local Jenkins agent
-        PATH = "/opt/homebrew/bin:/opt/podman/bin:${env.PATH}"
+        REGISTRY = "192.168.0.250:5001"
+        IMAGE_NAME = "dorm-portal"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout & Unit Tests') {
+        stage('Checkout') {
             steps {
-                echo 'Checking out code and running unit tests...'
-                dir('backend') {
-                    sh 'mvn clean test'
-                }
-                dir('frontend') {
-                    sh 'npm install --legacy-peer-deps'
-                    sh 'ng test --watch=false --browsers=ChromeHeadless'
-                }
+                checkout scm
             }
         }
 
-        stage('Local Podman Integration Test') {
+        stage('Build Docker Image') {
             steps {
-                echo 'Building and verifying container locally with Podman...'
-                sh 'podman build --platform linux/amd64 -t ${APP_NAME}:test-build .'
-                // Run a quick verification command to ensure the container starts
-                sh 'podman run --rm ${APP_NAME}:test-build java -version'
+                sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
-        stage('Deploy to Develop') {
-            when {
-                anyOf {
-                    branch 'develop'
-                    expression { env.GIT_BRANCH == 'origin/develop' || env.GIT_BRANCH == 'develop' || env.GIT_BRANCH == 'refs/heads/develop' }
-                }
-            }
+        stage('Push to Nexus Registry') {
             steps {
-                echo 'Deploying to Develop Environment (EC2: 8GB RAM)...'
-                script {
-                    deployToEC2(DEV_IP, 'dev')
-                }
+                sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
-        stage('Deploy to UAT') {
-            when {
-                anyOf {
-                    branch 'release'
-                    expression { env.GIT_BRANCH == 'origin/release' || env.GIT_BRANCH == 'release' || env.GIT_BRANCH == 'refs/heads/release' }
-                }
-            }
+        stage('Deploy to K3s') {
             steps {
-                echo 'Deploying to UAT Environment (EC2: 8GB RAM)...'
-                script {
-                    deployToEC2(UAT_IP, 'uat')
-                }
-            }
-        }
-
-        stage('Deploy to Production') {
-            when {
-                anyOf {
-                    branch 'main'
-                    expression { env.GIT_BRANCH == 'origin/main' || env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'refs/heads/main' }
-                }
-            }
-            steps {
-                echo 'Deploying to Production Environment (EC2: 8GB RAM)...'
-                script {
-                    deployToEC2(PROD_IP, 'prod')
+                withCredentials([file(credentialsId: 'k3s-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh "kubectl --kubeconfig=${KUBECONFIG} set image deployment/${IMAGE_NAME}-deployment ${IMAGE_NAME}-container=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} --namespace=default"
                 }
             }
         }
     }
-}
 
-// Reusable deployment function
-def deployToEC2(serverIp, envPrefix) {
-    sshagent([SSH_CRED]) {
-        // 1. Build and export Podman image
-        sh "podman build --platform linux/amd64 -t ${APP_NAME}:${envPrefix} ."
-        sh "podman save ${APP_NAME}:${envPrefix} | bzip2 > ${APP_NAME}-${envPrefix}.tar.bz2"
-        
-        // 2. Transfer image to EC2
-        sh "scp -o StrictHostKeyChecking=no ${APP_NAME}-${envPrefix}.tar.bz2 ec2-user@${serverIp}:~/"
-        
-        // 3. Execute remote commands: Load image, fetch secrets, run container
-        def jqCmd = 'jq -r --arg sep "=" "to_entries[] | .key + \\$sep + .value"'
-        sh """
-        ssh -o StrictHostKeyChecking=no ec2-user@${serverIp} '
-            # Create user-defined network if it does not exist
-            docker network create dorm-network || true
-            
-            # Start MySQL container if not already running on the network
-            if ! docker ps --filter "name=dorm-mysql" --format "{{.Names}}" | grep -q "^dorm-mysql\$"; then
-                docker rm -f dorm-mysql || true
-                docker run -d --name dorm-mysql \\
-                    --network dorm-network \\
-                    -p 3306:3306 \\
-                    -e MYSQL_ROOT_PASSWORD=password \\
-                    -e MYSQL_DATABASE=dormitory_local \\
-                    --restart unless-stopped \\
-                    mysql:8.0
-                
-                # Give MySQL some time to initialize
-                sleep 15
-            fi
-            
-            # Stop existing container
-            docker stop ${APP_NAME}-${envPrefix} || true
-            docker rm ${APP_NAME}-${envPrefix} || true
-            
-            # Load new image
-            bunzip2 -c ${APP_NAME}-${envPrefix}.tar.bz2 | docker load
-            docker tag localhost/${APP_NAME}:${envPrefix} ${APP_NAME}:${envPrefix} || true
-            
-            # Fetch secrets securely from AWS Secrets Manager using IAM role attached to EC2
-            aws secretsmanager get-secret-value --secret-id ${envPrefix}-dorm-secrets --query SecretString --output text | ${jqCmd} > .env.${envPrefix}
-            
-            # Dynamically route DB connection to the dorm-mysql container instead of localhost and append connection parameters
-            sed -i "s|localhost:3306/dormitory_local|dorm-mysql:3306/dormitory_local?createDatabaseIfNotExist=true\\&useSSL=false\\&allowPublicKeyRetrieval=true|g" .env.${envPrefix}
-            
-            # Run new container attached to the network
-            docker run -d --name ${APP_NAME}-${envPrefix} \\
-                --network dorm-network \\
-                --env-file .env.${envPrefix} \\
-                -p 80:8080 \\
-                --restart unless-stopped \\
-                ${APP_NAME}:${envPrefix}
-                
-            # Clean up secrets file immediately from disk
-            rm .env.${envPrefix}
-        '
-        """
+    post {
+        success {
+            echo "Deployment of ${IMAGE_NAME}:${IMAGE_TAG} succeeded!"
+        }
+        failure {
+            echo "Pipeline failed. Check logs above."
+        }
     }
 }
